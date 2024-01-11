@@ -224,3 +224,39 @@ func TestRace_OnlyRejected(t *testing.T) {
 	require.ErrorIs(t, err, errExpected)
 	require.Nil(t, val)
 }
+
+func TestFirst_Happy(t *testing.T) {
+	p1 := New(func(resolve func(string), reject func(error)) {
+		time.Sleep(time.Millisecond * 250)
+		resolve("faster")
+	})
+	p2 := New(func(resolve func(string), reject func(error)) {
+		time.Sleep(time.Millisecond * 500)
+		resolve("slower")
+	})
+	p3 := New(func(resolve func(string), reject func(error)) {
+		reject(errExpected)
+	})
+
+	p := First(ctx, p3, p2, p1)
+
+	val, err := p.Await(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "faster", val)
+}
+
+func TestFirst_OnlyRejected(t *testing.T) {
+	p1 := New(func(resolve func(any), reject func(error)) {
+		reject(errExpected)
+	})
+	p2 := New(func(resolve func(any), reject func(error)) {
+		reject(errExpected)
+	})
+
+	p := First(ctx, p1, p2)
+
+	val, err := p.Await(ctx)
+	require.Error(t, err)
+	require.ErrorIs(t, err, errExpected)
+	require.Nil(t, val)
+}

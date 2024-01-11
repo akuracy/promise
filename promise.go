@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/pkg/errors"
 )
 
 // Promise represents the eventual completion (or failure) of an asynchronous operation and its resulting value
@@ -223,6 +225,58 @@ func RaceWithPool[T any](
 		case err := <-errsChan:
 			reject(err)
 		}
+	}, pool)
+}
+
+// First resolves when the first promise resolves or rejects with all rejected promises
+func First[T any](
+	ctx context.Context,
+	promises ...*Promise[T],
+) *Promise[T] {
+	return FirstWithPool(ctx, defaultPool, promises...)
+}
+
+func FirstWithPool[T any](
+	ctx context.Context,
+	pool Pool,
+	promises ...*Promise[T],
+) *Promise[T] {
+	if len(promises) == 0 {
+		panic("missing promises")
+	}
+
+	return NewWithPool(func(resolve func(T), reject func(error)) {
+		valsChan := make(chan T, 1)
+		errsChan := make(chan tuple[error, int], len(promises))
+
+		for idx, p := range promises {
+			idx := idx // https://golang.org/doc/faq#closures_and_goroutines
+			_ = ThenWithPool(p, ctx, func(data T) (T, error) {
+				valsChan <- data
+				return data, nil
+			}, pool)
+			_ = CatchWithPool(p, ctx, func(err error) error {
+				errsChan <- tuple[error, int]{_1: err, _2: idx}
+				return err
+			}, pool)
+		}
+
+		errs := make([]error, len(promises))
+		for idx := 0; idx < len(promises); idx++ {
+			select {
+			case val := <-valsChan:
+				resolve(val)
+				return
+			case err := <-errsChan:
+				errs[err._2] = err._1
+			}
+		}
+
+		errCombo := errs[0]
+		for _, err := range errs[1:] {
+			errCombo = errors.Wrap(err, errCombo.Error())
+		}
+		reject(errCombo)
 	}, pool)
 }
 
