@@ -1,4 +1,4 @@
-module github.com/chebyrash/promise
+module github.com/akuracy/promise
 
 go 1.19
 

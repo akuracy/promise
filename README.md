@@ -1,7 +1,7 @@
 # PROMISE
-[![Go Report Card](https://goreportcard.com/badge/github.com/chebyrash/promise)](https://goreportcard.com/report/github.com/chebyrash/promise)
-[![Build Status](https://github.com/chebyrash/promise/actions/workflows/test.yml/badge.svg)](https://github.com/chebyrash/promise/actions)
-[![Go Reference](https://pkg.go.dev/badge/github.com/chebyrash/promise.svg)](https://pkg.go.dev/github.com/chebyrash/promise)
+[![Go Report Card](https://goreportcard.com/badge/github.com/akuracy/promise)](https://goreportcard.com/report/github.com/akuracy/promise)
+[![Build Status](https://github.com/akuracy/promise/actions/workflows/test.yml/badge.svg)](https://github.com/akuracy/promise/actions)
+[![Go Reference](https://pkg.go.dev/badge/github.com/akuracy/promise.svg)](https://pkg.go.dev/github.com/akuracy/promise)
 
 ## Introduction
 
@@ -17,7 +17,7 @@
 
 ## Install
 
-    $ go get github.com/chebyrash/promise
+    $ go get github.com/akuracy/promise
 
 ## Quickstart
 ```go
@@ -29,7 +29,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/chebyrash/promise"
+	"github.com/akuracy/promise"
 )
 
 func main() {
@@ -90,7 +90,7 @@ package main
 import (
 	"context"
 
-	"github.com/chebyrash/promise"
+	"github.com/akuracy/promise"
 )
 
 func main() {
