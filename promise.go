@@ -19,7 +19,7 @@ type Promise[T any] struct {
 func New[T any](
 	executor func(resolve func(T), reject func(error)),
 ) *Promise[T] {
-	return NewWithPool(executor, defaultPool)
+	return NewWithPool(executor, DefaultPool)
 }
 
 func NewWithPool[T any](
@@ -53,7 +53,7 @@ func Then[A, B any](
 	ctx context.Context,
 	resolve func(A) (B, error),
 ) *Promise[B] {
-	return ThenWithPool(p, ctx, resolve, defaultPool)
+	return ThenWithPool(p, ctx, resolve, DefaultPool)
 }
 
 func ThenWithPool[A, B any](
@@ -84,7 +84,7 @@ func Catch[T any](
 	ctx context.Context,
 	reject func(err error) error,
 ) *Promise[T] {
-	return CatchWithPool(p, ctx, reject, defaultPool)
+	return CatchWithPool(p, ctx, reject, DefaultPool)
 }
 
 func CatchWithPool[T any](
@@ -145,7 +145,7 @@ func All[T any](
 	ctx context.Context,
 	promises ...*Promise[T],
 ) *Promise[[]T] {
-	return AllWithPool(ctx, defaultPool, promises...)
+	return AllWithPool(ctx, DefaultPool, promises...)
 }
 
 func AllWithPool[T any](
@@ -192,7 +192,7 @@ func Race[T any](
 	ctx context.Context,
 	promises ...*Promise[T],
 ) *Promise[T] {
-	return RaceWithPool(ctx, defaultPool, promises...)
+	return RaceWithPool(ctx, DefaultPool, promises...)
 }
 
 func RaceWithPool[T any](
@@ -233,7 +233,7 @@ func First[T any](
 	ctx context.Context,
 	promises ...*Promise[T],
 ) *Promise[T] {
-	return FirstWithPool(ctx, defaultPool, promises...)
+	return FirstWithPool(ctx, DefaultPool, promises...)
 }
 
 func FirstWithPool[T any](
@@ -285,7 +285,7 @@ func AllResolved[T any](
 	ctx context.Context,
 	promises ...*Promise[T],
 ) *Promise[[]T] {
-	return AllResolvedWithPool(ctx, defaultPool, promises...)
+	return AllResolvedWithPool(ctx, DefaultPool, promises...)
 }
 
 func AllResolvedWithPool[T any](

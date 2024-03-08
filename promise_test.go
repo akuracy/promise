@@ -323,7 +323,7 @@ func TestAllResolved_LimitConcurrency(t *testing.T) {
 
 	// default pool (goroutines)
 	if false {
-		pool = defaultPool
+		pool = DefaultPool
 	}
 
 	for i := 0; i < 100; i++ {

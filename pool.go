@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	defaultPool = newDefaultPool()
+	DefaultPool = newDefaultPool()
 )
 
 type Pool interface {
