@@ -280,6 +280,54 @@ func FirstWithPool[T any](
 	}, pool)
 }
 
+// AllResolved resolves with all resolved promises, ignoring all rejected promises
+func AllResolved[T any](
+	ctx context.Context,
+	promises ...*Promise[T],
+) *Promise[[]T] {
+	return AllResolvedWithPool(ctx, defaultPool, promises...)
+}
+
+func AllResolvedWithPool[T any](
+	ctx context.Context,
+	pool Pool,
+	promises ...*Promise[T],
+) *Promise[[]T] {
+	if len(promises) == 0 {
+		panic("missing promises")
+	}
+
+	return NewWithPool(func(resolve func([]T), reject func(error)) {
+		resultsChan := make(chan tuple[T, int], len(promises))
+		errsChan := make(chan error, len(promises))
+
+		for idx, p := range promises {
+			idx := idx
+			_ = ThenWithPool(p, ctx, func(data T) (T, error) {
+				resultsChan <- tuple[T, int]{_1: data, _2: idx}
+				return data, nil
+			}, pool)
+			_ = CatchWithPool(p, ctx, func(err error) error {
+				errsChan <- err
+				return err
+			}, pool)
+		}
+
+		results := make([]T, len(promises))
+		onlyResults := make([]T, 0)
+		for idx := 0; idx < len(promises); idx++ {
+			select {
+			case result := <-resultsChan:
+				results[result._2] = result._1
+				onlyResults = append(onlyResults, result._1)
+			case <-errsChan:
+			}
+		}
+
+		resolve(onlyResults)
+	}, pool)
+}
+
 type tuple[T1, T2 any] struct {
 	_1 T1
 	_2 T2

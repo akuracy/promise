@@ -260,3 +260,84 @@ func TestFirst_OnlyRejected(t *testing.T) {
 	require.ErrorIs(t, err, errExpected)
 	require.Nil(t, val)
 }
+
+func TestAllResolved_Happy(t *testing.T) {
+	p1 := New(func(resolve func(string), reject func(error)) {
+		time.Sleep(time.Millisecond * 250)
+		resolve("faster")
+	})
+	p2 := New(func(resolve func(string), reject func(error)) {
+		time.Sleep(time.Millisecond * 500)
+		resolve("slower")
+	})
+	p3 := New(func(resolve func(string), reject func(error)) {
+		reject(errExpected)
+	})
+
+	p := AllResolved(ctx, p3, p2, p1)
+
+	val, err := p.Await(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, val)
+	require.Len(t, *val, 2)
+	require.Equal(t, "faster", (*val)[0])
+	require.Equal(t, "slower", (*val)[1])
+}
+
+func TestAllResolved_OnlyRejected(t *testing.T) {
+	p1 := New(func(resolve func(any), reject func(error)) {
+		reject(errExpected)
+	})
+	p2 := New(func(resolve func(any), reject func(error)) {
+		reject(errExpected)
+	})
+
+	p := AllResolved(ctx, p1, p2)
+
+	val, err := p.Await(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, val)
+	require.Empty(t, *val)
+}
+
+func TestAllResolved_LimitConcurrency(t *testing.T) {
+	var pool Pool
+
+	var promises []*Promise[any]
+
+	// conc pool
+	{
+		concPool := conc.New().
+			WithMaxGoroutines(10)
+		pool = FromConcPool(concPool)
+	}
+
+	// ants pool
+	if false {
+		antsPool, err := ants.NewPool(10)
+		if err != nil {
+			require.NoError(t, err)
+		}
+		pool = FromAntsPool(antsPool)
+	}
+
+	// default pool (goroutines)
+	if false {
+		pool = defaultPool
+	}
+
+	for i := 0; i < 100; i++ {
+		i := i
+		promises = append(promises, NewWithPool(func(resolve func(any), reject func(error)) {
+			time.Sleep(100 * time.Millisecond)
+			resolve(i)
+		}, pool))
+	}
+
+	p := AllResolvedWithPool(ctx, pool, promises...)
+
+	val, err := p.Await(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, val)
+	require.Len(t, *val, 100)
+}
