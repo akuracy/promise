@@ -14,6 +14,7 @@ type Promise[T any] struct {
 	err   error
 	ch    chan struct{}
 	once  sync.Once
+	start chan struct{}
 }
 
 func New[T any](
@@ -42,6 +43,34 @@ func NewWithPool[T any](
 
 	pool.Go(func() {
 		defer p.handlePanic()
+		executor(p.resolve, p.reject)
+	})
+
+	return p
+}
+
+func NewWithPoolWaiting[T any](
+	executor func(resolve func(T), reject func(error)),
+	pool Pool,
+) *Promise[T] {
+	if executor == nil {
+		panic("executor is nil")
+	}
+	if pool == nil {
+		panic("pool is nil")
+	}
+
+	p := &Promise[T]{
+		value: nil,
+		err:   nil,
+		ch:    make(chan struct{}),
+		once:  sync.Once{},
+		start: make(chan struct{}),
+	}
+
+	pool.Go(func() {
+		defer p.handlePanic()
+		<-p.start
 		executor(p.resolve, p.reject)
 	})
 
@@ -104,6 +133,11 @@ func CatchWithPool[T any](
 }
 
 func (p *Promise[T]) Await(ctx context.Context) (*T, error) {
+
+	if p.start != nil {
+		close(p.start)
+	}
+
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -326,6 +360,83 @@ func AllResolvedWithPool[T any](
 
 		resolve(onlyResults)
 	}, pool)
+}
+
+// Batch returns a channel of promises resolving up to batch size elements or rejecting each promise in error
+func Batch[T any](ctx context.Context, batchSize int, promises ...*Promise[T]) chan *Promise[[]T] {
+	return BatchWithPool(ctx, DefaultPool, batchSize, promises...)
+}
+
+// BatchWithPool returns a channel of promises resolving up to batch size elements or rejecting each promise in error
+func BatchWithPool[T any](ctx context.Context, pool Pool, batchSize int, promises ...*Promise[T]) chan *Promise[[]T] {
+	if len(promises) == 0 {
+		panic("missing promises")
+	}
+
+	resultsChan := make(chan tuple[T, int], len(promises))
+	errsChan := make(chan error, len(promises))
+
+	for idx, p := range promises {
+		idx := idx
+		_ = Then(p, ctx, func(data T) (T, error) {
+			resultsChan <- tuple[T, int]{_1: data, _2: idx}
+			return data, nil
+		})
+		_ = Catch(p, ctx, func(err error) error {
+			errsChan <- err
+			return err
+		})
+	}
+
+	batchs := make(chan *Promise[[]T])
+
+	go func() {
+		results := []T{}
+
+		remaining := batchSize
+		processed := 0
+
+		for idx := 0; idx < len(promises); idx++ {
+			select {
+			case result := <-resultsChan:
+				results = append(results, result._1)
+
+				remaining--
+				processed++
+
+				if remaining == 0 {
+					resultsCopy := results
+
+					batchs <- NewWithPoolWaiting(func(resolve func([]T), reject func(error)) {
+						resolve(resultsCopy)
+					}, pool)
+
+					results = []T{}
+					remaining = batchSize
+				}
+
+				if processed == len(promises) {
+					resultsCopy := results
+
+					batchs <- NewWithPoolWaiting(func(resolve func([]T), reject func(error)) {
+						resolve(resultsCopy)
+					}, pool)
+
+					close(batchs)
+				}
+
+			case err := <-errsChan:
+				processed++
+				remaining--
+
+				batchs <- NewWithPool(func(resolve func([]T), reject func(error)) {
+					reject(err)
+				}, pool)
+			}
+		}
+	}()
+
+	return batchs
 }
 
 type tuple[T1, T2 any] struct {

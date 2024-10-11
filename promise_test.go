@@ -3,6 +3,8 @@ package promise
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -242,7 +244,7 @@ func TestFirst_Happy(t *testing.T) {
 
 	val, err := p.Await(ctx)
 	require.NoError(t, err)
-	require.Equal(t, "faster", val)
+	require.Equal(t, "faster", *val)
 }
 
 func TestFirst_OnlyRejected(t *testing.T) {
@@ -263,12 +265,12 @@ func TestFirst_OnlyRejected(t *testing.T) {
 
 func TestAllResolved_Happy(t *testing.T) {
 	p1 := New(func(resolve func(string), reject func(error)) {
-		time.Sleep(time.Millisecond * 250)
-		resolve("faster")
-	})
-	p2 := New(func(resolve func(string), reject func(error)) {
 		time.Sleep(time.Millisecond * 500)
 		resolve("slower")
+	})
+	p2 := New(func(resolve func(string), reject func(error)) {
+		time.Sleep(time.Millisecond * 250)
+		resolve("faster")
 	})
 	p3 := New(func(resolve func(string), reject func(error)) {
 		reject(errExpected)
@@ -340,4 +342,126 @@ func TestAllResolved_LimitConcurrency(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, val)
 	require.Len(t, *val, 100)
+}
+
+func TestXxx(t *testing.T) {
+	ctx := context.Background()
+
+	p := New(func(resolve func(string), reject func(error)) {
+		time.Sleep(1 * time.Second)
+		resolve("a")
+	})
+
+	res, err := p.Await(ctx)
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, "a", *res)
+}
+
+func TestBatch(t *testing.T) {
+	var pool Pool
+
+	// conc pool
+	{
+		concPool := conc.New().
+			WithMaxGoroutines(1)
+		pool = FromConcPool(concPool)
+	}
+
+	// ants pool
+	if false {
+		antsPool, err := ants.NewPool(10)
+		if err != nil {
+			require.NoError(t, err)
+		}
+		pool = FromAntsPool(antsPool)
+	}
+
+	// default pool (goroutines)
+	if false {
+		pool = DefaultPool
+	}
+
+	ctx := context.Background()
+
+	var promises []*Promise[string]
+
+	for i := 0; i < 24; i++ {
+
+		i := i
+
+		promises = append(promises, New(func(resolve func(string), reject func(error)) {
+			time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
+			resolve(fmt.Sprintf("=> %d\n", i))
+		}))
+	}
+
+	processed := 0
+
+	for each := range BatchWithPool(ctx, pool, 5, promises...) {
+
+		res, err := each.Await(ctx)
+
+		require.NoError(t, err)
+		require.NotNil(t, res)
+
+		require.LessOrEqual(t, len(*res), 5)
+
+		processed += len(*res)
+
+		t.Log(*res)
+	}
+
+	require.Equal(t, 24, processed)
+
+}
+
+func TestBatchWithThen(t *testing.T) {
+	ctx := context.Background()
+
+	var promises []*Promise[string]
+	var promises2 []*Promise[string]
+
+	for i := 0; i < 24; i++ {
+
+		i := i
+
+		promises = append(promises, New(func(resolve func(string), reject func(error)) {
+			time.Sleep(time.Duration(rand.Intn(100)+100) * time.Millisecond)
+			t.Log("promise1")
+			resolve(fmt.Sprintf("=> %d", i))
+		}))
+	}
+
+	for _, each := range promises {
+		promises2 = append(promises2, Then(each, ctx, func(data string) (string, error) {
+			time.Sleep(time.Duration(rand.Intn(100)+100) * time.Millisecond)
+			t.Log("promise2")
+			return data + " modified", nil
+		}))
+	}
+
+	processed := 0
+
+	for each := range Batch(ctx, 5, promises2...) {
+
+		res, err := each.Await(ctx)
+
+		require.NoError(t, err)
+		require.NotNil(t, res)
+
+		require.LessOrEqual(t, len(*res), 5)
+
+		processed += len(*res)
+
+		t.Log(*res)
+
+		for _, each := range *res {
+			require.Contains(t, each, "modified")
+		}
+	}
+
+	require.Equal(t, 24, processed)
+
 }
